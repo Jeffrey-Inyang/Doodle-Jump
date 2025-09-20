@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doodle Jump: Jeffrey Inyang</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: linear-gradient(180deg,#C0FC5C,#A0DC4C,#80BC3C); display:flex; justify-content:center; align-items:center; height:100vh; overflow:hidden; font-family:Arial,sans-serif; }
+#gameContainer { position:relative; width:400px; height:600px; background:linear-gradient(180deg,#E8FFB8,#C0FC5C); border:3px solid #333; border-radius:15px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
+#gameCanvas { display:block; }
+#gameUI { position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:space-between; z-index:100; }
+#score, #instructions { background:rgba(0,0,0,0.7); color:#C0FC5C; padding:5px 10px; border-radius:15px; font-weight:bold; }
+#instructions { font-weight:normal; font-size:10px; text-align:center; max-width:120px; }
+#gameOver { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.9); color:#C0FC5C; padding:30px; border-radius:20px; text-align:center; display:none; z-index:200; }
+#gameOver h2 { margin-bottom:15px; color:#FF6B6B; }
+#restartBtn { background:#C0FC5C; color:#333; border:none; padding:10px 20px; border-radius:10px; font-weight:bold; cursor:pointer; margin-top:15px; transition:all 0.3s ease; }
+#restartBtn:hover { background:#A0DC4C; transform:scale(1.05); }
+</style>
+</head>
+<body>
+
+<div class="game-wrapper" style="display:flex; align-items:flex-start; gap:20px;">
+    <!-- Links / Title Section -->
+    <div class="sidebar">
+        <h1>Symbiotic: Doodle Jump</h1>
+        <div class="links">
+            <p>Check out the post on X: 
+                <a href="https://x.com/jeffrey_inyang/status/1968304229673832595" target="_blank">Doodle Jump</a>
+            </p>
+            <p>Join me on Discord: <strong>@lumpy_space_princ13973</strong></p>
+        </div>
+    </div>
+
+
+<div id="gameContainer">
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+<div id="gameUI">
+<div id="score">Score: 0</div>
+<div id="instructions">Use A/D or<br>Arrow Keys<br>to move</div>
+</div>
+<div id="gameOver">
+<h2>Game Over!</h2>
+<p>Final Score: <span id="finalScore">0</span></p>
+<p>Height Reached: <span id="finalHeight">0</span>m</p>
+<button id="restartBtn">Play Again</button>
+</div>
+</div>
+
+<script>
+class DoodleJump {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = 400;
+        this.height = 600;
+        this.keys = {};
+        this.gameRunning = true;
+        this.cameraY = 0;
+        this.score = 0;
+
+        // Player image
+        this.playerImg = new Image();
+        this.playerImg.src = "logo.png";
+        this.playerImgLoaded = false;
+        this.playerImg.onload = () => { this.playerImgLoaded = true; };
+
+        this.init();
+        this.setupControls();
+        this.gameLoop();
+    }
+
+    init() {
+        this.player = { x: 200, y: 500, width: 40, height: 30, velX: 0, velY: 0, direction: 1 };
+        this.platforms = [];
+        this.clouds = [];
+        this.score = 0;
+        this.cameraY = 0;
+
+        // Starting platform
+        this.platforms.push({ x: 150, y: 550, width: 100, height: 15, type: 'normal' });
+
+        // Generate platforms
+        let lastY = 450;
+        while (lastY > -2000) {
+            lastY -= Math.random() * 80 + 70;
+            this.addPlatform(lastY);
+        }
+
+        // Generate clouds
+        for (let i = 0; i < 15; i++) {
+            this.clouds.push({
+                x: Math.random() * this.width,
+                y: Math.random() * -2000,
+                width: Math.random() * 40 + 30,
+                height: Math.random() * 20 + 15
+            });
+        }
+    }
+
+    addPlatform(y) {
+        let type = 'normal', width = 80;
+        let rand = Math.random();
+        if (rand < 0.1) { type = 'moving'; width = 70; }
+        else if (rand < 0.15) { type = 'spring'; width = 60; }
+        this.platforms.push({
+            x: Math.random() * (this.width - width),
+            y,
+            width,
+            height: 15,
+            type,
+            direction: type === 'moving' ? (Math.random() < 0.5 ? -1 : 1) : 0,
+            speed: type === 'moving' ? 1 : 0
+        });
+    }
+
+    setupControls() {
+        document.addEventListener('keydown', (e) => this.keys[e.code] = true);
+        document.addEventListener('keyup', (e) => this.keys[e.code] = false);
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            document.getElementById('gameOver').style.display = 'none';
+            this.init();
+            this.gameRunning = true;
+        });
+    }
+
+    update() {
+        if (!this.gameRunning) return;
+
+        // Movement
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) {
+            this.player.velX = -5;
+            this.player.direction = -1;
+        } else if (this.keys['KeyD'] || this.keys['ArrowRight']) {
+            this.player.velX = 5;
+            this.player.direction = 1;
+        } else {
+            this.player.velX *= 0.85;
+            if (Math.abs(this.player.velX) < 0.1) this.player.velX = 0;
+        }
+
+        // Gravity
+        this.player.velY += 0.4;
+        this.player.x += this.player.velX;
+        this.player.y += this.player.velY;
+
+        // Screen wrap
+        if (this.player.x + this.player.width < 0) this.player.x = this.width;
+        if (this.player.x > this.width) this.player.x = -this.player.width;
+
+        this.handlePlatformCollisions();
+        this.updateMovingPlatforms();
+
+        // Camera
+        if (this.player.y < this.cameraY + 300) {
+            this.cameraY = this.player.y - 300;
+        }
+
+        // Score
+        this.score = Math.max(this.score, Math.floor((600 - this.player.y) / 10));
+
+        // Game over
+        if (this.player.y > this.cameraY + this.height + 100) this.gameOver();
+
+        // Extend platforms
+        let minY = Math.min(...this.platforms.map(p => p.y));
+        while (minY > this.cameraY - 2000) {
+            minY -= Math.random() * 80 + 70;
+            this.addPlatform(minY);
+        }
+
+        // Remove platforms below the screen for optimization
+        this.platforms = this.platforms.filter(p => p.y < this.cameraY + this.height + 200);
+    }
+
+    handlePlatformCollisions() {
+        if (this.player.velY > 0) {
+            for (let p of this.platforms) {
+                if (
+                    this.player.y + this.player.height >= p.y &&
+                    this.player.y + this.player.height <= p.y + p.height &&
+                    this.player.x + this.player.width > p.x &&
+                    this.player.x < p.x + p.width
+                ) {
+                    this.player.y = p.y - this.player.height;
+                    this.player.velY = (p.type === 'spring') ? -20 : -15;
+                    break;
+                }
+            }
+        }
+    }
+
+    updateMovingPlatforms() {
+        for (let p of this.platforms) {
+            if (p.type === 'moving') {
+                p.x += p.direction * p.speed;
+                if (p.x <= 0 || p.x >= this.width - p.width) p.direction *= -1;
+            }
+        }
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.ctx.save();
+        this.ctx.translate(0, -this.cameraY);
+
+        // Clouds
+        this.ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        for (let c of this.clouds) {
+            this.ctx.beginPath();
+            this.ctx.ellipse(c.x, c.y, c.width / 2, c.height / 2, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        // Platforms
+        for (let p of this.platforms) {
+            if (p.y > this.cameraY - 50 && p.y < this.cameraY + this.height + 50) {
+                this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                this.ctx.fillRect(p.x + 2, p.y + 2, p.width, p.height);
+                this.ctx.fillStyle = p.type === 'moving' ? '#FF6B6B' : p.type === 'spring' ? '#4ECDC4' : '#333';
+                this.ctx.fillRect(p.x, p.y, p.width, p.height);
+                this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                this.ctx.fillRect(p.x, p.y, p.width, 3);
+            }
+        }
+
+        // Player
+        if (this.playerImgLoaded) {
+            this.ctx.save();
+            if (this.player.direction === -1) {
+                this.ctx.translate(this.player.x + this.player.width / 2, this.player.y + this.player.height / 2);
+                this.ctx.scale(-1, 1);
+                this.ctx.drawImage(this.playerImg, -this.player.width / 2, -this.player.height / 2, this.player.width, this.player.height);
+            } else {
+                this.ctx.drawImage(this.playerImg, this.player.x, this.player.y, this.player.width, this.player.height);
+            }
+            this.ctx.restore();
+        } else {
+            // Draw placeholder
+            this.ctx.fillStyle = "#222";
+            this.ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
+        }
+
+        this.ctx.restore();
+        document.getElementById('score').textContent = `Score: ${this.score}`;
+    }
+
+    gameOver() {
+        this.gameRunning = false;
+        document.getElementById('finalScore').textContent = this.score;
+        document.getElementById('finalHeight').textContent = Math.max(0, Math.floor((600 - this.player.y) / 10));
+        document.getElementById('gameOver').style.display = 'block';
+    }
+
+    gameLoop() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+}
+
+window.addEventListener('load', () => new DoodleJump());
+</script>
+
+
+</body>
+</html>
